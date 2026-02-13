@@ -1,4 +1,5 @@
 class Voter:
+    # n_candidates includes 'No Confidence' as a candidate
     def __init__(self, voter_id: int, school: str, year: int, n_candidates: int):
         self.voter_id = voter_id
         self.school = school
