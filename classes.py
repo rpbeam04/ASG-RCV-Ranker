@@ -45,8 +45,9 @@ class Voter:
             choice = getattr(self, f'choice_{i}')
             if choice not in eliminated:
                 return choice
-            if no_confidence_last and choice.lower() == 'no confidence':
-                break
+            if choice is not None:
+                if no_confidence_last and choice.lower() == 'no confidence':
+                    break
         return None
     
     def count_choices(self, eliminated: list[str], no_confidence_last: bool = False):
@@ -64,6 +65,8 @@ class Voter:
         choices = []
         for i in range(1, self.n_candidates + 1):
             choice = getattr(self, f'choice_{i}')
+            if choice is None:
+                continue
             if choice not in eliminated and choice not in choices:
                 choices.append(choice)
             if no_confidence_last and choice.lower() == 'no confidence':
@@ -74,6 +77,7 @@ class VoteCounter:
     def __init__(self, candidates: list[str]):
         self.candidates = candidates
         self.vote_counts = {candidate: 0 for candidate in candidates}
+        self.choice_counts = {candidate: [0] * len(candidates) for candidate in candidates}
 
     def __str__(self):
         return f"Vote Counts: {self.vote_counts}"
@@ -94,13 +98,15 @@ class VoteCounter:
         """
         if reset_counts:
             self.vote_counts = {candidate: 0 for candidate in self.candidates if candidate not in eliminated}
+            self.choice_counts = {candidate: [0] * len(self.candidates) for candidate in self.candidates if candidate not in eliminated}
         
         for voter in voters:
             choice = voter.count_vote(eliminated, no_confidence_last)
             if choice in self.vote_counts:
                 self.vote_counts[choice] += 1
             elif choice is not None:
-                print(f"Warning: Choice '{choice}' not in candidates list.")
+                pass
+                # print(f"Warning: Choice '{choice}' not in candidates list.")
 
         return self.vote_counts
 
@@ -118,29 +124,41 @@ class VoteCounter:
         :return: A dataframe with the number of votes for each candidate at each rank
         :rtype: pd.DataFrame
         """
-        choice_counts = {candidate: [0] * len(self.candidates) for candidate in self.candidates if candidate not in eliminated}
+        choice_counts = {candidate: [0] * (len(self.candidates) - len(eliminated)) for candidate in self.candidates if candidate not in eliminated}
         
         for voter in voters:
             choices = voter.count_choices(eliminated, no_confidence_last)
             for rank, choice in enumerate(choices, start=1):
                 if choice in choice_counts:
-                    choice_counts[choice][rank-1] += 1
+                    try:
+                        choice_counts[choice][rank-1] += 1
+                    except IndexError:
+                        print(f"Warning: Rank {rank} for choice '{choice}' exceeds the number of candidates. Voter ID: {voter.voter_id}")
                 elif choice is not None:
+                    pass
                     print(f"Warning: Choice '{choice}' not in candidates list.")
         
-        df = pd.DataFrame(choice_counts, index=[f'Rank {i}' for i in range(1, len(self.candidates) + 1)])
+        self.choice_counts = choice_counts
+
+        df = pd.DataFrame(choice_counts, index=[f'Rank {i}' for i in range(1, len(self.candidates) - len(eliminated) + 1)])
+        df = df.transpose()
+        df = df.sort_values(by='Rank 1', ascending=False)
         return df
 
-    def eliminate_candidate(self, prev_eliminated: list[str] = None):
+    def eliminate_candidate(self, voters: list[Voter], prev_eliminated: list[str] = None):
         """
         Returns the candidate with the fewest votes to be eliminated. In case of a tie, follow the tiebreaker rules.
         
         :param self: VoteCounter object
+        :param voters: List of Voter objects
+        :type voters: list[Voter]
         :param prev_eliminated: List of previously eliminated candidates for tiebreaker rules
         :type prev_eliminated: list[str]
         :return: The candidate with the fewest votes
         :rtype: str
         """
+        assert all(candidate not in self.vote_counts for candidate in (prev_eliminated or [])), "Eliminated candidates should not be in vote counts."
+
         round = len(prev_eliminated) + 1 if prev_eliminated is not None else 1
 
         min_votes = min(self.vote_counts.values())
@@ -149,11 +167,47 @@ class VoteCounter:
         if len(candidates_with_min_votes) == 1:
             return candidates_with_min_votes[0]
         
-        # Stand in tiebreaker
-        else:
-            print(f"Random tiebreaker: {candidates_with_min_votes} with {min_votes} votes in round {round}.")
-            return np.random.choice(candidates_with_min_votes)
+        """
+        Tiebreaker rules:
+        When two or more tickets have the same number of votes and are either subject to elimination or victory, these tiebreaker rules apply;
+        1. When two or more tickets are tied for elimination or victory, resolve the tie as follows;
+        2. Compare the number of second-choice votes each tied ticket received in the current round.
+        3. Compare third-choice votes, then fourth-choice votes, etc., until the tie is broken.
+        4. Compare the number of first-choice votes each tied ticket received in the previous round.
+        5. Repeat this comparison for earlier rounds in reverse order until the tie is broken.
+        6. Compare second-choice votes in the previous round, then third-choice votes, etc., for each earlier round, until the tie is broken.
+        7. In a tie for elimination, eliminate the remaining tied candidates. In a tie for victory, there will be a runoff.        
+        """
+        # choices for current round
+        self.count_choices(voters, prev_eliminated or [])
+        for choice_rank in range(2, len(self.candidates) + 1):
+            # Only consider candidates with enough ranks
+            valid_candidates = [c for c in candidates_with_min_votes if choice_rank-1 < len(self.choice_counts[c])]
+            if not valid_candidates:
+                continue
+            min_choice_votes = min(self.choice_counts[c][choice_rank-1] for c in valid_candidates)
+            candidates_with_min_choice_votes = [c for c in valid_candidates if self.choice_counts[c][choice_rank-1] == min_choice_votes]
+            if len(candidates_with_min_choice_votes) == 1:
+                return candidates_with_min_choice_votes[0]
+            candidates_with_min_votes = candidates_with_min_choice_votes
+
+        # choices for previous rounds
+        for choice_rank in range(1, len(self.candidates) + 1):
+            for prev_round in range(round - 1, 0, -1):
+                self.count_choices(voters, prev_eliminated[:prev_round] or [])
+                # Only consider candidates with enough ranks
+                valid_candidates = [c for c in candidates_with_min_votes if choice_rank-1 < len(self.choice_counts[c])]
+                if not valid_candidates:
+                    continue
+                min_choice_votes = min(self.choice_counts[c][choice_rank-1] for c in valid_candidates)
+                candidates_with_min_choice_votes = [c for c in valid_candidates if self.choice_counts[c][choice_rank-1] == min_choice_votes]
+                if len(candidates_with_min_choice_votes) == 1:
+                    return candidates_with_min_choice_votes[0]
+                candidates_with_min_votes = candidates_with_min_choice_votes
         
+        # If still tied, return None for now
+        return None
+
 class Election:
     def __init__(self, voters: list[Voter], candidates: list[str], no_confidence_last: bool = False):
         self.voters = voters
@@ -185,7 +239,12 @@ class Election:
                     self.winner = candidate
                     return candidate
             
-            eliminated_candidate = self.vote_counter.eliminate_candidate(self.eliminated_candidates)
+            eliminated_candidate = self.vote_counter.eliminate_candidate(self.voters, self.eliminated_candidates)
+            if eliminated_candidate is None:
+                print("Tie detected among remaining candidates. No winner can be determined.")
+                self.winner = None
+                return None
+            
             self.eliminated_candidates.append(eliminated_candidate)
 
             if len(self.eliminated_candidates) == len(self.candidates) - 1:
@@ -196,6 +255,11 @@ class Election:
                 else:
                     self.winner = None
                     return None
+
+            if self.last_round > len(self.candidates):
+                print("Error: More rounds than candidates. Possible issue with vote counting or elimination.")
+                self.winner = None
+                return None
 
     def get_round_vote_counts(self, round: int):
         """
