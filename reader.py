@@ -8,8 +8,8 @@ def read_election_data(filepath: str):
     
     :param filepath: The path to the CSV file containing the election data.
     :type filepath: str
-    :return: A list of Voter objects representing the election data.
-    :rtype: list[Voter]
+    :return: A list of Voter objects representing the election data and a list of candidates.
+    :rtype: tuple[list[Voter], list[str]]
     """
     try:
         data = pd.read_csv(filepath)
@@ -28,6 +28,10 @@ def read_election_data(filepath: str):
     SCHOOL = "Please select your primary college of enrollment"
     YEAR = "Please select your expected graduation year"
 
+    _cols = [ID_COL, SCHOOL, YEAR] + CHOICE_COLUMNS
+    assert all(col in data.columns for col in _cols), f"Missing columns in the data. Required columns: {_cols}"
+    data = data[_cols]
+
     all_voters = []
     for _, row in data.iterrows():
         voter_id = int(row[ID_COL])
@@ -39,9 +43,19 @@ def read_election_data(filepath: str):
         for i in range(1, N_CANDIDATES + 1):
             choice_col = CHOICE_COLUMNS[i-1]
             if choice_col in row:
-                choice = str(row[choice_col]).strip()
+                if pd.isna(row[choice_col]):
+                    choice = None
+                else:
+                    choice = str(row[choice_col]).strip()
                 voter.set_choice(i, choice)
 
         all_voters.append(voter)
 
-    return all_voters
+    candidates = set()
+    for voter in all_voters:
+        for i in range(1, N_CANDIDATES + 1):
+            choice = voter.get_choice(i)
+            if choice and choice is not None:
+                candidates.add(choice)
+
+    return all_voters, list(candidates)
