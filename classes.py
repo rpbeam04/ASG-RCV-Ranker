@@ -5,11 +5,12 @@ from pprint import pprint
 
 class Voter:
     # n_candidates includes 'No Confidence' as a candidate
-    def __init__(self, voter_id: int, school: str, year: int, n_candidates: int):
+    def __init__(self, voter_id: int, school: str, year: int, n_candidates: int, timestamp: pd.Timestamp = None):
         self.voter_id = voter_id
         self.school = school
         self.year = year
         self.n_candidates = n_candidates
+        self.timestamp = timestamp
         for i in range(1, n_candidates + 1):
             setattr(self, f'choice_{i}', None)
 

@@ -9,20 +9,20 @@ import numpy as np
 fake_test = False
 
 FAKE_FILE = "Fake Data/test_fake_data.csv"
-REAL_FILE = "Data/test_real_data.csv"
+REAL_FILE = "Data/results.csv"
 NU_PURPLE = (78, 42, 132)
 with open("Data/colors.json", "r") as f:
     CAMPAIGN_COLORS = json.load(f)
 
 # Parameters
 WELCOME_SCREEN_TIME = 8
-OBS_START_DELAY = 3
-INITIAL_ZERO_SCREEN_TIME = 2
-BATCH_WAIT_MIN = 2
-BATCH_WAIT_VAR = 0
-ROUND_DISPLAY_TIME = 3
-ELIMINATION_SCREEN_TIME = 6
-N_SPLITS = 2
+OBS_START_DELAY = 1
+INITIAL_ZERO_SCREEN_TIME = 4
+BATCH_WAIT_MIN = 3.5
+BATCH_WAIT_VAR = 1
+ROUND_DISPLAY_TIME = 10
+ELIMINATION_SCREEN_TIME = 4
+N_SPLITS = 20
 VAR_SPLITS = 0.2
 WIDTH, HEIGHT = 1250, 850
 # Final projection screen duration after the election ends
@@ -577,8 +577,6 @@ if __name__ == "__main__":
         # advance to next round
         round_num += 1
 
-    pygame.quit()
-
     # --- Final projection after election ends ---
     # Show final winner/projection for a configurable duration
     try:
@@ -601,3 +599,5 @@ if __name__ == "__main__":
                             final_winner, 'Elected ASG Presidents', 'ASG Projects:', True)
             pygame.display.flip()
             clock.tick(30)
+
+    pygame.quit()

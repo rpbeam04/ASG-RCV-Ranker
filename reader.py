@@ -33,17 +33,19 @@ def read_election_data(filepath: str):
     SCHOOL = "Please select your primary college of enrollment"
     YEAR = "Please select your expected graduation year"
 
-    _cols = [ID_COL, SCHOOL, YEAR] + CHOICE_COLUMNS
+    _cols = [ID_COL, SCHOOL, YEAR, "Submitted On"] + CHOICE_COLUMNS
     assert all(col in data.columns for col in _cols), f"Missing columns in the data. Required columns: {_cols}"
     data = data[_cols]
 
     all_voters = []
     for _, row in data.iterrows():
+        submission_time = row["Submitted On"]
+        submission_time = pd.to_datetime(submission_time, errors='coerce')
         voter_id = int(row[ID_COL])
         school = str(row[SCHOOL]).strip()
         year = re.search(r'\d{4}', str(row[YEAR]))
-        year = int(year.group(0)) if year is not None else None
-        voter = Voter(voter_id, school, year, N_CANDIDATES)
+        year = int(year.group(0)) if year is not None else 0
+        voter = Voter(voter_id, school, year, N_CANDIDATES, submission_time if not pd.isna(submission_time) else None)
         
         for i in range(1, N_CANDIDATES + 1):
             choice_col = CHOICE_COLUMNS[i-1]
