@@ -1,3 +1,4 @@
+from generate import generate_voters
 from reader import read_election_data
 from classes import Election
 
@@ -6,8 +7,33 @@ import time
 import json
 import numpy as np
 
-fake_test = False
+# Types: ASG, Fake, Generated
+election_type = "ASG"
+OFFICE_TITLE = "ASG President"
 
+# Generation Parameters
+N_VOTERS = np.random.randint(10000, 20000)
+CANDIDATES = [
+    "Barack Obama",
+    "Hillary Clinton",
+    "Bernie Sanders",
+    "Al Gore",
+    "Kamala Harris",
+    "Joe Biden",
+    "John Kerry"
+]
+WEIGHTS = [np.random.uniform(0.01, 1) for i,_ in enumerate(CANDIDATES)]
+VARIANCES = [np.random.uniform(0.02, 0.4) for _ in CANDIDATES]
+CORRELATION_MATRIX = np.eye(len(CANDIDATES))
+for i in range(len(CANDIDATES)):
+    for j in range(i+1, len(CANDIDATES)):
+        corr = np.random.beta(0.95, 0.9) * 2 - 1
+        CORRELATION_MATRIX[i, j] = corr
+        CORRELATION_MATRIX[j, i] = corr
+
+TIME_FACTORS = [np.random.uniform(-1, 1) for _ in CANDIDATES]
+
+# Files
 FAKE_FILE = "Fake Data/test_fake_data.csv"
 REAL_FILE = "Data/results.csv"
 NU_PURPLE = (78, 42, 132)
@@ -16,17 +42,20 @@ with open("Data/colors.json", "r") as f:
 
 # Parameters
 WELCOME_SCREEN_TIME = 8
-OBS_START_DELAY = 1
+OBS_START_DELAY = 0.1
 INITIAL_ZERO_SCREEN_TIME = 4
-BATCH_WAIT_MIN = 3.5
+BATCH_WAIT_MIN = 2
 BATCH_WAIT_VAR = 1
-ROUND_DISPLAY_TIME = 10
-ELIMINATION_SCREEN_TIME = 4
+ROUND_DISPLAY_TIME = 9
+ELIMINATION_SCREEN_TIME = 5
 N_SPLITS = 20
-VAR_SPLITS = 0.2
+VAR_SPLITS = 0.75
 WIDTH, HEIGHT = 1250, 850
 # Final projection screen duration after the election ends
-FINAL_PROJECTION_TIME = 30
+FINAL_PROJECTION_TIME = 15
+
+# Color Palettes (Default, Red, Blue)
+COLOR_PALETTE = "Blue"
 
 # Functions
 
@@ -145,17 +174,35 @@ if __name__ == "__main__":
     def get_color(name):
         if name in CAMPAIGN_COLORS:
             return tuple(CAMPAIGN_COLORS[name])
-        colors = [
+        default_colors = [
             (220, 38, 38), (37, 99, 235), (16, 185, 129), (234, 179, 8), (168, 85, 247),
             (251, 191, 36), (59, 130, 246), (239, 68, 68), (34, 197, 94), (250, 204, 21)
         ]
+        red_colors = [
+            (220, 38, 38), (239, 68, 68), (255, 99, 99), (185, 28, 28), (254, 202, 202),
+            (153, 27, 27), (252, 165, 165), (127, 29, 29), (251, 113, 113), (191, 18, 18)
+        ]
+        blue_colors = [
+            (37, 99, 235), (59, 130, 246), (99, 179, 237), (29, 78, 216), (147, 197, 253),
+            (30, 64, 175), (191, 219, 254), (21, 39, 161), (191, 219, 254), (13, 42, 148)
+        ]
+        if COLOR_PALETTE == "Red":
+            colors = red_colors
+        elif COLOR_PALETTE == "Blue":
+            colors = blue_colors
+        else:
+            colors = default_colors
         return colors[hash(name) % len(colors)]
 
     n_splits = N_SPLITS
     var_splits = VAR_SPLITS
 
-    BALLOTS_FILE = FAKE_FILE if fake_test else REAL_FILE
-    voters, candidates = read_election_data(BALLOTS_FILE)
+    BALLOTS_FILE = FAKE_FILE if election_type == "Fake" else REAL_FILE
+    if election_type == "Generated":
+        voters = generate_voters(N_VOTERS, CANDIDATES, WEIGHTS, VARIANCES, CORRELATION_MATRIX, TIME_FACTORS, seed=42)
+        candidates = CANDIDATES
+    else:
+        voters, candidates = read_election_data(BALLOTS_FILE)
 
     # OBS Start delay (unchanged)
     obs_delay_start = time.time()
@@ -252,7 +299,7 @@ if __name__ == "__main__":
 
     # Initial screen: 0% of vote in
     screen.fill(BG_COLOR)
-    office_title = "ASG President"
+    office_title = OFFICE_TITLE
     header = font_header.render(office_title, True, NU_PURPLE)
     header_rect = header.get_rect()
     header_rect.topleft = (40, 20)
@@ -332,7 +379,7 @@ if __name__ == "__main__":
 
         # Draw partial results
         screen.fill(BG_COLOR)
-        office_title = "ASG President"
+        office_title = OFFICE_TITLE
         header = font_header.render(office_title, True, NU_PURPLE)
         header_rect = header.get_rect()
         header_rect.topleft = (40, 20)
@@ -423,7 +470,7 @@ if __name__ == "__main__":
             break
 
         screen.fill(BG_COLOR)
-        office_title = "ASG President"
+        office_title = OFFICE_TITLE
         header = font_header.render(office_title, True, NU_PURPLE)
         header_rect = header.get_rect()
         header_rect.topleft = (40, 20)
@@ -494,7 +541,7 @@ if __name__ == "__main__":
                     exit()
             # redraw current round results during countdown so screen isn't static
             screen.fill(BG_COLOR)
-            office_title = "ASG President"
+            office_title = OFFICE_TITLE
             header = font_header.render(office_title, True, NU_PURPLE)
             header_rect = header.get_rect()
             header_rect.topleft = (40, 20)
@@ -530,7 +577,7 @@ if __name__ == "__main__":
         if majority:
             projection_queue.append({
                 'campaign': winner,
-                'title': 'Elected ASG Presidents',
+                'title': f'Elected {OFFICE_TITLE}',
                 'subtitle': 'ASG Projects:',
                 'checkmark': True,
                 'duration': ELIMINATION_SCREEN_TIME
@@ -596,7 +643,7 @@ if __name__ == "__main__":
                     pygame.quit()
                     exit()
             draw_projection(screen, font_header, font_round, font_name, BG_COLOR, NU_PURPLE, TEXT_COLOR, get_color, WIDTH, HEIGHT,
-                            final_winner, 'Elected ASG Presidents', 'ASG Projects:', True)
+                            final_winner, f'Elected {OFFICE_TITLE}', 'ASG Projects:', True)
             pygame.display.flip()
             clock.tick(30)
 

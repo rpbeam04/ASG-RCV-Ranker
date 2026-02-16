@@ -3,7 +3,7 @@ from classes import Voter
 import json
 import re
 
-def read_election_data(filepath: str):
+def read_election_data(filepath: str, asg: bool = True):
     """
     Reads election data into classes from a CSV file downloaded from 'Cats on Campus.
     
@@ -12,9 +12,12 @@ def read_election_data(filepath: str):
     :return: A list of Voter objects representing the election data and a list of candidates.
     :rtype: tuple[list[Voter], list[str]]
     """
-    with open("Data/names.json", "r") as f:
-        CANDIDATE_REPLACEMENTS = json.load(f)
-    CANDIDATE_REPLACEMENTS = {k.lower(): v for k, v in CANDIDATE_REPLACEMENTS.items()}
+    if asg:
+        with open("Data/names.json", "r") as f:
+            CANDIDATE_REPLACEMENTS = json.load(f)
+        CANDIDATE_REPLACEMENTS = {k.lower(): v for k, v in CANDIDATE_REPLACEMENTS.items()}
+    else:
+        CANDIDATE_REPLACEMENTS = {}
 
     try:
         data = pd.read_csv(filepath)
@@ -22,16 +25,21 @@ def read_election_data(filepath: str):
         print(f"An error occurred while reading the file: {e}")
         return None, None
     
-    ID_COL = "User Id"
-    N_CANDIDATES = 5   # 'No Confidence' counts as a candidate
-    FIRST_CHOICE = "Please select your TOP choice for president/vice president ticket"
-    SECOND_CHOICE = "Please select your SECOND choice for president/vice president ticket"
-    THIRD_CHOICE = "Please select your THIRD choice for president/vice president ticket"
-    FOURTH_CHOICE = "Please select your FOURTH choice for president/vice president ticket"
-    FIFTH_CHOICE = "Please select your FIFTH choice for president/vice president ticket"
-    CHOICE_COLUMNS = [FIRST_CHOICE, SECOND_CHOICE, THIRD_CHOICE, FOURTH_CHOICE, FIFTH_CHOICE]
-    SCHOOL = "Please select your primary college of enrollment"
-    YEAR = "Please select your expected graduation year"
+    if asg:
+        ID_COL = "User Id"
+        TIMESTAMP_COL = "Submitted On"
+        N_CANDIDATES = 5   # 'No Confidence' counts as a candidate
+        FIRST_CHOICE = "Please select your TOP choice for president/vice president ticket"
+        SECOND_CHOICE = "Please select your SECOND choice for president/vice president ticket"
+        THIRD_CHOICE = "Please select your THIRD choice for president/vice president ticket"
+        FOURTH_CHOICE = "Please select your FOURTH choice for president/vice president ticket"
+        FIFTH_CHOICE = "Please select your FIFTH choice for president/vice president ticket"
+        CHOICE_COLUMNS = [FIRST_CHOICE, SECOND_CHOICE, THIRD_CHOICE, FOURTH_CHOICE, FIFTH_CHOICE]
+        SCHOOL = "Please select your primary college of enrollment"
+        YEAR = "Please select your expected graduation year"
+    else:
+        pass
+        # can decide on different schema for other data
 
     _cols = [ID_COL, SCHOOL, YEAR, "Submitted On"] + CHOICE_COLUMNS
     assert all(col in data.columns for col in _cols), f"Missing columns in the data. Required columns: {_cols}"
@@ -39,12 +47,21 @@ def read_election_data(filepath: str):
 
     all_voters = []
     for _, row in data.iterrows():
-        submission_time = row["Submitted On"]
+        submission_time = row[TIMESTAMP_COL]
         submission_time = pd.to_datetime(submission_time, errors='coerce')
+        # if submission_time > pd.to_datetime("2026-02-14 11:30:00"):
+        #     continue
+        # if submission_time < pd.to_datetime("2026-02-13 09:00:00"):
+        #     continue
         voter_id = int(row[ID_COL])
-        school = str(row[SCHOOL]).strip()
-        year = re.search(r'\d{4}', str(row[YEAR]))
-        year = int(year.group(0)) if year is not None else 0
+        if asg:
+            school = str(row[SCHOOL]).strip()
+            year = re.search(r'\d{4}', str(row[YEAR]))
+            year = int(year.group(0)) if year is not None else 0
+        else:
+            school = "N/A"
+            year = 0
+        
         voter = Voter(voter_id, school, year, N_CANDIDATES, submission_time if not pd.isna(submission_time) else None)
         
         for i in range(1, N_CANDIDATES + 1):
